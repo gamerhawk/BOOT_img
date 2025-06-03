@@ -1,0 +1,1505 @@
+diff --git a/Makefile b/Makefile
+index 6558415a..6bbff043 100644
+--- a/Makefile
++++ b/Makefile
+@@ -174,7 +174,7 @@ $(filter-out _all sub-make $(CURDIR)/Makefile, $(MAKECMDGOALS)) _all: sub-make
+ 	@:
+ 
+ sub-make: FORCE
+-	$(Q)$(MAKE) -C $(KBUILD_OUTPUT) KBUILD_SRC=$(CURDIR) \
++	$(Q)$(MAKE) -j10 -C $(KBUILD_OUTPUT) KBUILD_SRC=$(CURDIR) \
+ 	-f $(CURDIR)/Makefile $(filter-out _all sub-make,$(MAKECMDGOALS))
+ 
+ # Leave processing to above invocation of make
+@@ -1337,6 +1337,13 @@ u-boot.ldr:	u-boot
+ # Use 'make BINMAN_VERBOSE=3' to set vebosity level
+ default_dt := $(if $(DEVICE_TREE),$(DEVICE_TREE),$(CONFIG_DEFAULT_DEVICE_TREE))
+ 
++$(info -------------------- BL31 before assignment: $(origin BL31) = $(BL31))
++override BL31=/mnt/d/matter/ti-processor-sdk-linux-am62xx-evm-10.00.07.04/board-support/prebuilt-images/am62xx-evm/bl31.bin
++TEE=/mnt/d/matter/ti-processor-sdk-linux-am62xx-evm-10.00.07.04/targetNFS/usr/lib/firmware/tee-raw.bin
++
++$(info -------------------- BL31=$(BL31))
++$(info -------------------- TEE=$(TEE))
++
+ quiet_cmd_binman = BINMAN  $@
+ cmd_binman = $(srctree)/tools/binman/binman $(if $(BINMAN_DEBUG),-D) \
+ 		$(foreach f,$(BINMAN_TOOLPATHS),--toolpath $(f)) \
+diff --git a/arch/arm/mach-k3/am625_init.c b/arch/arm/mach-k3/am625_init.c
+index 8238ca3a..9a302a04 100644
+--- a/arch/arm/mach-k3/am625_init.c
++++ b/arch/arm/mach-k3/am625_init.c
+@@ -6,6 +6,8 @@
+  *	Suman Anna <s-anna@ti.com>
+  */
+ 
++#define DEBUG
++
+ #include <spl.h>
+ #include <asm/io.h>
+ #include <asm/arch/hardware.h>
+diff --git a/common/dlmalloc.c b/common/dlmalloc.c
+index de3f0422..89871fb0 100644
+--- a/common/dlmalloc.c
++++ b/common/dlmalloc.c
+@@ -12,6 +12,8 @@
+ #define DEBUG
+ #endif
+ 
++#define DEBUG
++
+ #include <common.h>
+ #include <log.h>
+ #include <asm/global_data.h>
+@@ -612,15 +614,21 @@ void mem_malloc_init(ulong start, ulong size)
+ 	mem_malloc_end = start + size;
+ 	mem_malloc_brk = start;
+ 
++  printf("MMI 1\n");
++
+ #ifdef CONFIG_SYS_MALLOC_DEFAULT_TO_INIT
+ 	malloc_init();
+ #endif
+ 
+-	debug("using memory %#lx-%#lx for malloc()\n", mem_malloc_start,
++  printf("MMI 2\n");
++
++	debug("using memory %lu-%lu for malloc()\n", mem_malloc_start,
+ 	      mem_malloc_end);
+-#if CONFIG_IS_ENABLED(SYS_MALLOC_CLEAR_ON_INIT)
+-	memset((void *)mem_malloc_start, 0x0, size);
+-#endif
++// #if CONFIG_IS_ENABLED(SYS_MALLOC_CLEAR_ON_INIT)
++// 	memset((void *)mem_malloc_start, 0x0, size);
++//   printf("MMI 3\n");
++// #endif
++  printf("MMI 4\n");
+ }
+ 
+ /* field-extraction macros */
+diff --git a/common/spl/spl.c b/common/spl/spl.c
+index 1fb79163..f6674e7e 100644
+--- a/common/spl/spl.c
++++ b/common/spl/spl.c
+@@ -6,6 +6,8 @@
+  * Aneesh V <aneesh@ti.com>
+  */
+ 
++#define DEBUG
++
+ #include <common.h>
+ #include <bloblist.h>
+ #include <binman_sym.h>
+@@ -574,8 +576,9 @@ static int spl_load_image(struct spl_image_info *spl_image,
+ 
+ 	bootdev.boot_device = loader->boot_device;
+ 	bootdev.boot_device_name = NULL;
+-
++	printf("SLI: 1\n");
+ 	ret = loader->load_image(spl_image, &bootdev);
++	printf("SLI: 2\n");
+ #ifdef CONFIG_SPL_LEGACY_IMAGE_CRC_CHECK
+ 	if (!ret && spl_image->dcrc_length) {
+ 		/* check data crc */
+@@ -613,6 +616,7 @@ static int boot_from_devices(struct spl_image_info *spl_image,
+ 	int ret = -ENODEV;
+ 	int i;
+ 
++	printf("BFD: 1\n");
+ 	for (i = 0; i < count && spl_boot_list[i] != BOOT_DEVICE_NONE; i++) {
+ 		struct spl_image_loader *loader;
+ 		int bootdev = spl_boot_list[i];
+@@ -681,17 +685,22 @@ void board_init_r(gd_t *dummy1, ulong dummy2)
+ 
+ 	spl_set_bd();
+ 
++	printf("BIR: 1\n");
++
+ 	if (IS_ENABLED(CONFIG_SPL_SYS_MALLOC)) {
+ 		mem_malloc_init((ulong)map_sysmem(SPL_SYS_MALLOC_START,
+ 						  SPL_SYS_MALLOC_SIZE),
+ 				SPL_SYS_MALLOC_SIZE);
+ 		gd->flags |= GD_FLG_FULL_MALLOC_INIT;
+ 	}
++	printf("BIR: 2\n");
+ 	if (!(gd->flags & GD_FLG_SPL_INIT)) {
+ 		if (spl_init())
+ 			hang();
+ 	}
++	printf("BIR: 3\n");
+ 	timer_init();
++	printf("BIR: 4\n");
+ 	if (CONFIG_IS_ENABLED(BLOBLIST)) {
+ 		ret = bloblist_init();
+ 		if (ret) {
+@@ -701,6 +710,7 @@ void board_init_r(gd_t *dummy1, ulong dummy2)
+ 			hang();
+ 		}
+ 	}
++	printf("BIR: 5\n");
+ 	if (CONFIG_IS_ENABLED(HANDOFF)) {
+ 		int ret;
+ 
+@@ -710,26 +720,26 @@ void board_init_r(gd_t *dummy1, ulong dummy2)
+ 			hang();
+ 		}
+ 	}
+-
++	printf("BIR: 6\n");
+ 	if (CONFIG_IS_ENABLED(BOARD_INIT))
+ 		spl_board_init();
+-
++	printf("BIR: 7\n");
+ 	if (IS_ENABLED(CONFIG_SPL_WATCHDOG) && CONFIG_IS_ENABLED(WDT))
+ 		initr_watchdog();
+-
++	printf("BIR: 8\n");
+ 	if (IS_ENABLED(CONFIG_SPL_OS_BOOT) || CONFIG_IS_ENABLED(HANDOFF) ||
+ 	    IS_ENABLED(CONFIG_SPL_ATF) || IS_ENABLED(CONFIG_SPL_NET))
+ 		dram_init_banksize();
+-
++	printf("BIR: 9\n");
+ 	if (CONFIG_IS_ENABLED(PCI) && !(gd->flags & GD_FLG_DM_DEAD)) {
+ 		ret = pci_init();
+ 		if (ret)
+ 			puts(SPL_TPL_PROMPT "Cannot initialize PCI\n");
+ 		/* Don't fail. We still can try other boot methods. */
+ 	}
+-
++	printf("BIR: 10\n");
+ 	bootcount_inc();
+-
++	printf("BIR: 11\n");
+ 	/* Dump driver model states to aid analysis */
+ 	if (CONFIG_IS_ENABLED(DM_STATS)) {
+ 		struct dm_stats mem;
+@@ -737,15 +747,16 @@ void board_init_r(gd_t *dummy1, ulong dummy2)
+ 		dm_get_mem(&mem);
+ 		dm_dump_mem(&mem);
+ 	}
+-
++	printf("BIR: 12\n");
+ 	memset(&spl_image, '\0', sizeof(spl_image));
+ 	if (IS_ENABLED(CONFIG_SPL_OS_BOOT))
+ 		spl_image.arg = (void *)SPL_PAYLOAD_ARGS_ADDR;
+ 	spl_image.boot_device = BOOT_DEVICE_NONE;
+ 	board_boot_order(spl_boot_list);
+-
++	printf("BIR: 13\n");
+ 	ret = boot_from_devices(&spl_image, spl_boot_list,
+ 				ARRAY_SIZE(spl_boot_list));
++	printf("BIR: 13-1\n");
+ 	if (ret) {
+ 		if (CONFIG_IS_ENABLED(SHOW_ERRORS))
+ 			printf(SPL_TPL_PROMPT "failed to boot from all boot devices (err=%d)\n",
+@@ -754,9 +765,9 @@ void board_init_r(gd_t *dummy1, ulong dummy2)
+ 			puts(SPL_TPL_PROMPT "failed to boot from all boot devices\n");
+ 		hang();
+ 	}
+-
++	printf("BIR: 14\n");
+ 	spl_perform_fixups(&spl_image);
+-
++	printf("BIR: 15\n");
+ 	os = spl_image.os;
+ 	if (os == IH_OS_U_BOOT) {
+ 		debug("Jumping to %s...\n", spl_phase_name(spl_next_phase()));
+@@ -780,6 +791,7 @@ void board_init_r(gd_t *dummy1, ulong dummy2)
+ 	} else {
+ 		debug("Unsupported OS image.. Jumping nevertheless..\n");
+ 	}
++	printf("BIR: 16\n");
+ 	if (CONFIG_IS_ENABLED(SYS_MALLOC_F) &&
+ 	    !IS_ENABLED(CONFIG_SPL_SYS_MALLOC_SIZE))
+ 		debug("SPL malloc() used 0x%lx bytes (%ld KB)\n",
+@@ -802,6 +814,7 @@ void board_init_r(gd_t *dummy1, ulong dummy2)
+ 				       dev->name, rc);
+ 		}
+ 	}
++	printf("BIR: 17\n");
+ 	if (CONFIG_IS_ENABLED(HANDOFF)) {
+ 		ret = write_spl_handoff();
+ 		if (ret)
+@@ -816,6 +829,7 @@ void board_init_r(gd_t *dummy1, ulong dummy2)
+ 	}
+ 
+ 	spl_board_prepare_for_boot();
++	printf("BIR: 18\n");
+ 	jump_to_image(&spl_image);
+ }
+ 
+diff --git a/common/spl/spl_mmc.c b/common/spl/spl_mmc.c
+index 3d032bb2..4354605d 100644
+--- a/common/spl/spl_mmc.c
++++ b/common/spl/spl_mmc.c
+@@ -5,6 +5,8 @@
+  *
+  * Aneesh V <aneesh@ti.com>
+  */
++#define DEBUG
++
+ #include <common.h>
+ #include <dm.h>
+ #include <log.h>
+@@ -83,15 +85,23 @@ static int spl_mmc_find_device(struct mmc **mmcp, u32 boot_device)
+ {
+ 	int err, mmc_dev;
+ 
++	printf("SMMFD: boot_device=%d\n", boot_device);
+ 	mmc_dev = spl_mmc_get_device_index(boot_device);
+-	if (mmc_dev < 0)
++	printf("SMMFD: mmc_dev=%d\n", mmc_dev);
++	if (mmc_dev < 0) {
+ 		return mmc_dev;
++	}
+ 
+ #if CONFIG_IS_ENABLED(DM_MMC)
++	printf("SMMFD: 1\n");
+ 	err = mmc_init_device(mmc_dev);
++	printf("SMMFD: 2\n");
+ #else
++	printf("SMMFD: 3\n");
+ 	err = mmc_initialize(NULL);
++	printf("SMMFD: 4\n");
+ #endif /* DM_MMC */
++	printf("SMMFD: 5\n");
+ 	if (err) {
+ #ifdef CONFIG_SPL_LIBCOMMON_SUPPORT
+ 		printf("spl: could not initialize mmc. error: %d\n", err);
+@@ -99,6 +109,7 @@ static int spl_mmc_find_device(struct mmc **mmcp, u32 boot_device)
+ 		return err;
+ 	}
+ 	*mmcp = find_mmc_device(mmc_dev);
++	printf("SMMFD: 6 mmcp=%p\n", *mmcp);
+ 	err = *mmcp ? 0 : -ENODEV;
+ 	if (err) {
+ #ifdef CONFIG_SPL_LIBCOMMON_SUPPORT
+@@ -210,6 +221,7 @@ static int spl_mmc_do_fs_boot(struct spl_image_info *spl_image,
+ 	int err = -ENOSYS;
+ 
+ 	__maybe_unused int partition = CONFIG_SYS_MMCSD_FS_BOOT_PARTITION;
++	printf("SMDFSB: partition=%d\n", partition);
+ 
+ #if CONFIG_SYS_MMCSD_FS_BOOT_PARTITION == -1
+ 	{
+@@ -235,12 +247,14 @@ static int spl_mmc_do_fs_boot(struct spl_image_info *spl_image,
+ 
+ #ifdef CONFIG_SPL_FS_FAT
+ 	if (!spl_start_uboot()) {
++		printf("SMDFSB: fat os\n");
+ 		err = spl_load_image_fat_os(spl_image, bootdev, mmc_get_blk_desc(mmc),
+ 			partition);
+ 		if (!err)
+ 			return err;
+ 	}
+ #ifdef CONFIG_SPL_FS_LOAD_PAYLOAD_NAME
++	printf("SMDFSB: fat load\n");
+ 	err = spl_load_image_fat(spl_image, bootdev, mmc_get_blk_desc(mmc),
+ 				 partition,
+ 				 filename);
+@@ -250,12 +264,14 @@ static int spl_mmc_do_fs_boot(struct spl_image_info *spl_image,
+ #endif
+ #ifdef CONFIG_SPL_FS_EXT4
+ 	if (!spl_start_uboot()) {
++		printf("SMDFSB: ext os\n");
+ 		err = spl_load_image_ext_os(spl_image, bootdev, mmc_get_blk_desc(mmc),
+ 			partition);
+ 		if (!err)
+ 			return err;
+ 	}
+ #ifdef CONFIG_SPL_FS_LOAD_PAYLOAD_NAME
++	printf("SMDFSB: ext load\n");
+ 	err = spl_load_image_ext(spl_image, bootdev, mmc_get_blk_desc(mmc),
+ 				 partition,
+ 				 filename);
+@@ -360,34 +376,43 @@ int spl_mmc_load(struct spl_image_info *spl_image,
+ 	__maybe_unused int part = 0;
+ 	int mmc_dev;
+ 
++	printf("SMMCL: filename=%s\n", filename);
++
+ 	/* Perform peripheral init only once for an mmc device */
+ 	mmc_dev = spl_mmc_get_device_index(bootdev->boot_device);
++	printf("SMMCL: 2\n");
+ 	if (!mmc || spl_mmc_get_mmc_devnum(mmc) != mmc_dev) {
++		printf("SMMCL: 3\n");
+ 		err = spl_mmc_find_device(&mmc, bootdev->boot_device);
+ 		if (err)
+ 			return err;
++		printf("SMMCL: 4\n");
+ 
+ 		err = mmc_init(mmc);
++		printf("SMMCL: 5\n");
+ 		if (err) {
+ 			mmc = NULL;
++			printf("SMMCL: 6\n");
+ #ifdef CONFIG_SPL_LIBCOMMON_SUPPORT
+ 			printf("spl: mmc init failed with error: %d\n", err);
+ #endif
+ 			return err;
+ 		}
++		printf("SMMCL: 7\n");
+ 	}
+ 
+ 	boot_mode = spl_mmc_boot_mode(mmc, bootdev->boot_device);
+ 	err = -EINVAL;
++	printf("SMMCL: boot_mode=%d\n", boot_mode);
+ 	switch (boot_mode) {
+ 	case MMCSD_MODE_EMMCBOOT:
+ 		part = spl_mmc_emmc_boot_partition(mmc);
+-
++		printf("SMMCL: part=%d\n", part);
+ 		if (CONFIG_IS_ENABLED(MMC_TINY))
+ 			err = mmc_switch_part(mmc, part);
+ 		else
+ 			err = blk_dselect_hwpart(mmc_get_blk_desc(mmc), part);
+-
++		printf("SMMCL: err=%d\n", err);
+ 		if (err) {
+ #ifdef CONFIG_SPL_LIBCOMMON_SUPPORT
+ 			puts("spl: mmc partition switch failed\n");
+diff --git a/configs/am62x_evm_r5_defconfig b/configs/am62x_evm_r5_defconfig
+index 222765d0..ac3bf80f 100644
+--- a/configs/am62x_evm_r5_defconfig
++++ b/configs/am62x_evm_r5_defconfig
+@@ -20,6 +20,13 @@ CONFIG_DM_RESET=y
+ CONFIG_SPL_MMC=y
+ CONFIG_SPL_SERIAL=y
+ CONFIG_SPL_DRIVERS_MISC=y
++
++CONFIG_SPL_LOG=y
++CONFIG_LOGLEVEL=4
++CONFIG_SPL_LOG_MAX_LEVEL=9
++CONFIG_SPL_LOG_CONSOLE=y
++
++
+ CONFIG_SPL_STACK_R_ADDR=0x82000000
+ CONFIG_SPL_SYS_MALLOC_F_LEN=0x7000
+ CONFIG_SPL_SIZE_LIMIT=0x3A7F0
+diff --git a/configs/j7200_evm_a72_defconfig b/configs/j7200_evm_a72_defconfig
+index f15d71cd..3fc57fc2 100644
+--- a/configs/j7200_evm_a72_defconfig
++++ b/configs/j7200_evm_a72_defconfig
+@@ -72,6 +72,7 @@ CONFIG_CMD_GPT=y
+ CONFIG_CMD_I2C=y
+ CONFIG_CMD_MMC=y
+ CONFIG_CMD_MTD=y
++CONFIG_CMD_NFS=y
+ CONFIG_CMD_REMOTEPROC=y
+ CONFIG_CMD_UFS=y
+ CONFIG_CMD_USB=y
+diff --git a/configs/j721e_evm_a72_defconfig b/configs/j721e_evm_a72_defconfig
+index 789d0abd..fdcdc6c2 100644
+--- a/configs/j721e_evm_a72_defconfig
++++ b/configs/j721e_evm_a72_defconfig
+@@ -71,6 +71,7 @@ CONFIG_CMD_GPT=y
+ CONFIG_CMD_I2C=y
+ CONFIG_CMD_MMC=y
+ CONFIG_CMD_MTD=y
++CONFIG_CMD_NFS=y
+ CONFIG_CMD_REMOTEPROC=y
+ CONFIG_CMD_UFS=y
+ CONFIG_CMD_USB=y
+diff --git a/configs/j721s2_evm_a72_defconfig b/configs/j721s2_evm_a72_defconfig
+index 8f6a69c4..3a4253a8 100644
+--- a/configs/j721s2_evm_a72_defconfig
++++ b/configs/j721s2_evm_a72_defconfig
+@@ -74,6 +74,7 @@ CONFIG_CMD_GPT=y
+ CONFIG_CMD_I2C=y
+ CONFIG_CMD_MMC=y
+ CONFIG_CMD_MTD=y
++CONFIG_CMD_NFS=y
+ CONFIG_CMD_REMOTEPROC=y
+ CONFIG_CMD_UFS=y
+ CONFIG_CMD_USB=y
+diff --git a/configs/j722s_evm_a53_defconfig b/configs/j722s_evm_a53_defconfig
+index f807d0f0..44e05cdb 100644
+--- a/configs/j722s_evm_a53_defconfig
++++ b/configs/j722s_evm_a53_defconfig
+@@ -68,6 +68,7 @@ CONFIG_CMD_GPT=y
+ CONFIG_CMD_I2C=y
+ CONFIG_CMD_MMC=y
+ CONFIG_CMD_MTD=y
++CONFIG_CMD_NFS=y
+ CONFIG_CMD_REMOTEPROC=y
+ CONFIG_CMD_USB=y
+ CONFIG_CMD_USB_MASS_STORAGE=y
+diff --git a/configs/j784s4_evm_a72_defconfig b/configs/j784s4_evm_a72_defconfig
+index 26a5e363..b080208c 100644
+--- a/configs/j784s4_evm_a72_defconfig
++++ b/configs/j784s4_evm_a72_defconfig
+@@ -73,6 +73,7 @@ CONFIG_CMD_GPT=y
+ CONFIG_CMD_I2C=y
+ CONFIG_CMD_MMC=y
+ CONFIG_CMD_MTD=y
++CONFIG_CMD_NFS=y
+ CONFIG_CMD_REMOTEPROC=y
+ CONFIG_CMD_USB=y
+ CONFIG_CMD_TIME=y
+diff --git a/disk/part.c b/disk/part.c
+index 36b88205..cb25006a 100644
+--- a/disk/part.c
++++ b/disk/part.c
+@@ -4,6 +4,9 @@
+  * Wolfgang Denk, DENX Software Engineering, wd@denx.de.
+  */
+ 
++#define	PART_DEBUG
++#define DEBUG 1
++
+ #include <common.h>
+ #include <blk.h>
+ #include <command.h>
+@@ -15,8 +18,6 @@
+ #include <part.h>
+ #include <ubifs_uboot.h>
+ 
+-#undef	PART_DEBUG
+-
+ #ifdef	PART_DEBUG
+ #define	PRINTF(fmt,args...)	printf (fmt ,##args)
+ #else
+diff --git a/disk/part_dos.c b/disk/part_dos.c
+index 567ead75..d058014c 100644
+--- a/disk/part_dos.c
++++ b/disk/part_dos.c
+@@ -68,6 +68,7 @@ static int test_block_type(unsigned char *buffer)
+ 
+ 	if((buffer[DOS_PART_MAGIC_OFFSET + 0] != 0x55) ||
+ 	    (buffer[DOS_PART_MAGIC_OFFSET + 1] != 0xaa) ) {
++		printf("DOSTBT: 1\n");
+ 		return (-1);
+ 	} /* no DOS Signature at all */
+ 	p = (struct dos_partition *)&buffer[DOS_PART_TBL_OFFSET];
+@@ -79,6 +80,7 @@ static int test_block_type(unsigned char *buffer)
+ 		if (p->sys_ind)
+ 			++part_count;
+ 	}
++	printf("DOSTBT: slot=%d, part_count=%d\n", slot, part_count);
+ 
+ 	/*
+ 	 * If the partition table is invalid or empty,
+@@ -101,6 +103,7 @@ static int test_block_type(unsigned char *buffer)
+ static int part_test_dos(struct blk_desc *desc)
+ {
+ #ifndef CONFIG_SPL_BUILD
++	printf("DOSPT: 1\n");
+ 	ALLOC_CACHE_ALIGN_BUFFER(legacy_mbr, mbr,
+ 			DIV_ROUND_UP(desc->blksz, sizeof(legacy_mbr)));
+ 
+@@ -117,9 +120,11 @@ static int part_test_dos(struct blk_desc *desc)
+ #else
+ 	ALLOC_CACHE_ALIGN_BUFFER(unsigned char, buffer, desc->blksz);
+ 
++	printf("DOSPT: 2\n");
+ 	if (blk_dread(desc, 0, 1, (ulong *)buffer) != 1)
+ 		return -1;
+ 
++	printf("DOSPT: 3\n");
+ 	if (test_block_type(buffer) != DOS_MBR)
+ 		return -1;
+ #endif
+diff --git a/drivers/core/uclass.c b/drivers/core/uclass.c
+index e46d5717..61cc6cc7 100644
+--- a/drivers/core/uclass.c
++++ b/drivers/core/uclass.c
+@@ -7,6 +7,7 @@
+  */
+ 
+ #define LOG_CATEGORY LOGC_DM
++#define LOG_DEBUG 1
+ 
+ #include <common.h>
+ #include <dm.h>
+diff --git a/drivers/mmc/am654_sdhci.c b/drivers/mmc/am654_sdhci.c
+index 8f109553..dbbad20f 100644
+--- a/drivers/mmc/am654_sdhci.c
++++ b/drivers/mmc/am654_sdhci.c
+@@ -5,6 +5,8 @@
+  * Texas Instruments' K3 SD Host Controller Interface
+  */
+ 
++#define DEBUG
++
+ #include <clk.h>
+ #include <common.h>
+ #include <dm.h>
+@@ -319,34 +321,54 @@ int am654_sdhci_init(struct am654_sdhci_plat *plat)
+ 	u32 mask, val;
+ 	int ret;
+ 
++	debug("%s: ENTER - plat=%p, flags=0x%x\n", __func__, plat, plat ? plat->flags : 0);
++
+ 	/* Reset OTAP to default value */
+ 	mask = OTAPDLYENA_MASK | OTAPDLYSEL_MASK;
++	debug("%s: resetting OTAP to default value, mask=0x%x\n", __func__, mask);
+ 	regmap_update_bits(plat->base, PHY_CTRL4, mask, 0x0);
+ 
+ 	if (plat->flags & DLL_CALIB) {
++		debug("%s: DLL_CALIB flag set, checking calibration status\n", __func__);
+ 		regmap_read(plat->base, PHY_STAT1, &val);
++		debug("%s: PHY_STAT1 = 0x%x, CALDONE_MASK = 0x%x\n", __func__, val, CALDONE_MASK);
++		
+ 		if (~val & CALDONE_MASK) {
+ 			/* Calibrate IO lines */
++			debug("%s: calibration not done, starting calibration\n", __func__);
+ 			regmap_update_bits(plat->base, PHY_CTRL1, PDB_MASK,
+ 					   PDB_MASK);
+ 			ret = regmap_read_poll_timeout(plat->base, PHY_STAT1,
+ 						       val, val & CALDONE_MASK,
+ 						       1, 20);
+-			if (ret)
++			if (ret) {
++				debug("%s: calibration timeout, returning %d\n", __func__, ret);
+ 				return ret;
++			}
++			debug("%s: calibration completed successfully\n", __func__);
++		} else {
++			debug("%s: calibration already done\n", __func__);
+ 		}
+ 	}
+ 
+ 	/* Enable pins by setting IO mux to 0 */
+-	if (plat->flags & IOMUX_PRESENT)
++	if (plat->flags & IOMUX_PRESENT) {
++		debug("%s: IOMUX_PRESENT flag set, enabling pins\n", __func__);
+ 		regmap_update_bits(plat->base, PHY_CTRL1, IOMUX_ENABLE_MASK, 0);
++	}
+ 
+ 	/* Set slot type based on SD or eMMC */
+-	if (plat->non_removable)
++	if (plat->non_removable) {
+ 		ctl_cfg_2 = SLOTTYPE_EMBEDDED;
++		debug("%s: non-removable card, setting slot type to EMBEDDED\n", __func__);
++	} else {
++		debug("%s: removable card, slot type remains default\n", __func__);
++	}
+ 
++	debug("%s: setting CTL_CFG_2 to 0x%x\n", __func__, ctl_cfg_2);
+ 	regmap_update_bits(plat->base, CTL_CFG_2, SLOTTYPE_MASK, ctl_cfg_2);
+ 
++	debug("%s: initialization complete, returning 0\n", __func__);
+ 	return 0;
+ }
+ 
+@@ -358,6 +380,8 @@ static int am654_sdhci_deferred_probe(struct sdhci_host *host)
+ 	unsigned long start;
+ 	int val;
+ 
++	debug("%s: ENTER - host=%p, dev=%p, dev->name=%s, plat=%p\n", __func__, host, dev, dev ? dev->name : "NULL", plat);
++
+ 	/*
+ 	 * The controller takes about 1 second to debounce the card detect line
+ 	 * and doesn't let us power on until that time is up. Instead of waiting
+@@ -365,16 +389,25 @@ static int am654_sdhci_deferred_probe(struct sdhci_host *host)
+ 	 * maximum of 2 seconds to be safe..
+ 	 */
+ 	start = get_timer(0);
++	debug("%s: starting card detect polling, timeout=%d ms\n", __func__, MAX_SDCD_DEBOUNCE_TIME);
++	
+ 	do {
+-		if (get_timer(start) > MAX_SDCD_DEBOUNCE_TIME)
++		if (get_timer(start) > MAX_SDCD_DEBOUNCE_TIME) {
++			debug("%s: card detect timeout after %lu ms, returning -ENOMEDIUM\n", __func__, get_timer(start));
+ 			return -ENOMEDIUM;
++		}
+ 
+ 		val = mmc_getcd(host->mmc);
++		debug("%s: mmc_getcd returned %d (elapsed: %lu ms)\n", __func__, val, get_timer(start));
+ 	} while (!val);
+ 
++	debug("%s: card detected after %lu ms, calling am654_sdhci_init\n", __func__, get_timer(start));
+ 	am654_sdhci_init(plat);
+ 
+-	return sdhci_probe(dev);
++	debug("%s: calling sdhci_probe(dev)\n", __func__);
++	int ret = sdhci_probe(dev);
++	debug("%s: sdhci_probe returned %d\n", __func__, ret);
++	return ret;
+ }
+ 
+ static void am654_sdhci_write_b(struct sdhci_host *host, u8 val, int reg)
+diff --git a/drivers/mmc/mmc-uclass.c b/drivers/mmc/mmc-uclass.c
+index 32845683..9856fd27 100644
+--- a/drivers/mmc/mmc-uclass.c
++++ b/drivers/mmc/mmc-uclass.c
+@@ -6,6 +6,7 @@
+  */
+ 
+ #define LOG_CATEGORY UCLASS_MMC
++#define DEBUG
+ 
+ #include <common.h>
+ #include <bootdev.h>
+@@ -102,14 +103,25 @@ static int dm_mmc_get_cd(struct udevice *dev)
+ {
+ 	struct dm_mmc_ops *ops = mmc_get_ops(dev);
+ 
+-	if (!ops->get_cd)
++	debug("%s: ENTER - dev=%p, dev->name=%s\n", __func__, dev, dev ? dev->name : "NULL");
++	
++	if (!ops->get_cd) {
++		debug("%s: no get_cd operation, returning -ENOSYS\n", __func__);
+ 		return -ENOSYS;
+-	return ops->get_cd(dev);
++	}
++	
++	debug("%s: calling ops->get_cd(dev)\n", __func__);
++	int ret = ops->get_cd(dev);
++	debug("%s: ops->get_cd returned %d\n", __func__, ret);
++	return ret;
+ }
+ 
+ int mmc_getcd(struct mmc *mmc)
+ {
+-	return dm_mmc_get_cd(mmc->dev);
++	debug("%s: ENTER - mmc=%p, mmc->dev=%p\n", __func__, mmc, mmc ? mmc->dev : NULL);
++	int ret = dm_mmc_get_cd(mmc->dev);
++	debug("%s: dm_mmc_get_cd returned %d\n", __func__, ret);
++	return ret;
+ }
+ 
+ #ifdef MMC_SUPPORTS_TUNING
+@@ -178,15 +190,25 @@ static int dm_mmc_deferred_probe(struct udevice *dev)
+ {
+ 	struct dm_mmc_ops *ops = mmc_get_ops(dev);
+ 
+-	if (ops->deferred_probe)
+-		return ops->deferred_probe(dev);
++	debug("%s: ENTER - dev=%p, dev->name=%s\n", __func__, dev, dev ? dev->name : "NULL");
++	
++	if (ops->deferred_probe) {
++		debug("%s: calling ops->deferred_probe(dev)\n", __func__);
++		int ret = ops->deferred_probe(dev);
++		debug("%s: ops->deferred_probe returned %d\n", __func__, ret);
++		return ret;
++	}
+ 
++	debug("%s: no deferred_probe operation, returning 0\n", __func__);
+ 	return 0;
+ }
+ 
+ int mmc_deferred_probe(struct mmc *mmc)
+ {
+-	return dm_mmc_deferred_probe(mmc->dev);
++	debug("%s: ENTER - mmc=%p, mmc->dev=%p\n", __func__, mmc, mmc ? mmc->dev : NULL);
++	int ret = dm_mmc_deferred_probe(mmc->dev);
++	debug("%s: dm_mmc_deferred_probe returned %d\n", __func__, ret);
++	return ret;
+ }
+ 
+ static int dm_mmc_reinit(struct udevice *dev)
+diff --git a/drivers/mmc/mmc.c b/drivers/mmc/mmc.c
+index d96db7a0..828ee6a7 100644
+--- a/drivers/mmc/mmc.c
++++ b/drivers/mmc/mmc.c
+@@ -7,6 +7,9 @@
+  * Based vaguely on the Linux code
+  */
+ 
++#define DEBUG
++// #define CONFIG_MMC_TRACE
++
+ #include <config.h>
+ #include <common.h>
+ #include <blk.h>
+@@ -35,6 +38,7 @@ static int mmc_set_signal_voltage(struct mmc *mmc, uint signal_voltage);
+ 
+ static int mmc_wait_dat0(struct mmc *mmc, int state, int timeout_us)
+ {
++	printf("DEBUG: %s\n", __func__);
+ 	if (mmc->cfg->ops->wait_dat0)
+ 		return mmc->cfg->ops->wait_dat0(mmc, state, timeout_us);
+ 
+@@ -48,6 +52,7 @@ __weak int board_mmc_getwp(struct mmc *mmc)
+ 
+ int mmc_getwp(struct mmc *mmc)
+ {
++	printf("DEBUG: %s\n", __func__);
+ 	int wp;
+ 
+ 	wp = board_mmc_getwp(mmc);
+@@ -77,6 +82,7 @@ void mmmc_trace_before_send(struct mmc *mmc, struct mmc_cmd *cmd)
+ 
+ void mmmc_trace_after_send(struct mmc *mmc, struct mmc_cmd *cmd, int ret)
+ {
++	printf("DEBUG: %s\n", __func__);
+ 	int i;
+ 	u8 *ptr;
+ 
+@@ -164,6 +170,7 @@ const char *mmc_mode_name(enum bus_mode mode)
+ 
+ static uint mmc_mode2freq(struct mmc *mmc, enum bus_mode mode)
+ {
++	printf("DEBUG: %s\n", __func__);
+ 	static const int freqs[] = {
+ 	      [MMC_LEGACY]	= 25000000,
+ 	      [MMC_HS]		= 26000000,
+@@ -180,12 +187,16 @@ static uint mmc_mode2freq(struct mmc *mmc, enum bus_mode mode)
+ 	      [MMC_HS_400_ES]	= 200000000,
+ 	};
+ 
+-	if (mode == MMC_LEGACY)
++	if (mode == MMC_LEGACY) {
++		printf("DEBUG: %s speed: %d\n", __func__, mmc->legacy_speed);
+ 		return mmc->legacy_speed;
++	}
+ 	else if (mode >= MMC_MODES_END)
+ 		return 0;
+-	else
++	else {
++		printf("DEBUG: %s speed: %d\n", __func__, freqs[mode]);
+ 		return freqs[mode];
++	}
+ }
+ 
+ static int mmc_select_mode(struct mmc *mmc, enum bus_mode mode)
+@@ -550,6 +561,7 @@ static int mmc_go_idle(struct mmc *mmc)
+ #if CONFIG_IS_ENABLED(MMC_UHS_SUPPORT)
+ static int mmc_switch_voltage(struct mmc *mmc, int signal_voltage)
+ {
++	printf("DEBUG: %s, %d\n", __func__, signal_voltage);
+ 	struct mmc_cmd cmd;
+ 	int err = 0;
+ 
+@@ -809,6 +821,8 @@ int mmc_send_ext_csd(struct mmc *mmc, u8 *ext_csd)
+ static int __mmc_switch(struct mmc *mmc, u8 set, u8 index, u8 value,
+ 			bool send_status)
+ {
++	printf("DEBUG: %s set=%d index=%d value=%d send_status=%d\n", 
++		__func__, set, index, value, send_status);
+ 	unsigned int status, start;
+ 	struct mmc_cmd cmd;
+ 	int timeout_ms = DEFAULT_CMD6_TIMEOUT_MS;
+@@ -886,6 +900,7 @@ int mmc_boot_wp(struct mmc *mmc)
+ 
+ int mmc_boot_wp_single_partition(struct mmc *mmc, int partition)
+ {
++	printf("DEBUG: %s\n", __func__);
+ 	u8 value;
+ 	int ret;
+ 
+@@ -915,6 +930,7 @@ int mmc_boot_wp_single_partition(struct mmc *mmc, int partition)
+ static int mmc_set_card_speed(struct mmc *mmc, enum bus_mode mode,
+ 			      bool hsdowngrade)
+ {
++	printf("DEBUG: %s mode=%d hsdowngrade=%d\n", __func__, mode, hsdowngrade);
+ 	int err;
+ 	int speed_bits;
+ 
+@@ -1039,6 +1055,7 @@ static int mmc_get_capabilities(struct mmc *mmc)
+ 
+ static int mmc_set_capacity(struct mmc *mmc, int part_num)
+ {
++	printf("DEBUG: %s\n", __func__);
+ 	switch (part_num) {
+ 	case 0:
+ 		mmc->capacity = mmc->capacity_user;
+@@ -1067,6 +1084,7 @@ static int mmc_set_capacity(struct mmc *mmc, int part_num)
+ 
+ int mmc_switch_part(struct mmc *mmc, unsigned int part_num)
+ {
++	printf("DEBUG: %s %u\n", __func__, part_num);
+ 	int ret;
+ 	int retry = 3;
+ 
+@@ -1094,6 +1112,7 @@ int mmc_hwpart_config(struct mmc *mmc,
+ 		      const struct mmc_hwpart_conf *conf,
+ 		      enum mmc_hwpart_conf_mode mode)
+ {
++	printf("DEBUG: %s\n", __func__);
+ 	u8 part_attrs = 0;
+ 	u32 enh_size_mult;
+ 	u32 enh_start_addr;
+@@ -1290,6 +1309,7 @@ int mmc_hwpart_config(struct mmc *mmc,
+ #if !CONFIG_IS_ENABLED(DM_MMC)
+ int mmc_getcd(struct mmc *mmc)
+ {
++	printf("DEBUG: %s\n", __func__);
+ 	int cd;
+ 
+ 	cd = board_mmc_getcd(mmc);
+@@ -1308,6 +1328,7 @@ int mmc_getcd(struct mmc *mmc)
+ #if !CONFIG_IS_ENABLED(MMC_TINY)
+ static int sd_switch(struct mmc *mmc, int mode, int group, u8 value, u8 *resp)
+ {
++	printf("DEBUG: %s mode=%d group=%d value=%d\n", __func__, mode, group, value);
+ 	struct mmc_cmd cmd;
+ 	struct mmc_data data;
+ 
+@@ -1428,12 +1449,25 @@ static int sd_get_capabilities(struct mmc *mmc)
+ 	if (sd3_bus_mode & SD_MODE_UHS_DDR50)
+ 		mmc->card_caps |= MMC_CAP(UHS_DDR50);
+ #endif
++	log_debug("SD Card: v%d.%d %d-bit%s%s\n", 
++		(mmc->version >> 4) & 0xF, mmc->version & 0xF,
++		(mmc->card_caps & MMC_MODE_4BIT) ? 4 : 1,
++		(mmc->card_caps & MMC_CAP(SD_HS)) ? " HS" : "",
++#if CONFIG_IS_ENABLED(MMC_UHS_SUPPORT)
++		(mmc->card_caps & (MMC_CAP(UHS_SDR104)|MMC_CAP(UHS_SDR50)|MMC_CAP(UHS_SDR25)|MMC_CAP(UHS_SDR12)|MMC_CAP(UHS_DDR50))) ? " UHS" : ""
++#else
++		""
++#endif
++	);
++
++
+ 
+ 	return 0;
+ }
+ 
+ static int sd_set_card_speed(struct mmc *mmc, enum bus_mode mode)
+ {
++	printf("DEBUG: %s\n", __func__);
+ 	int err;
+ 
+ 	ALLOC_CACHE_ALIGN_BUFFER(uint, switch_status, 16);
+@@ -1471,6 +1505,7 @@ static int sd_set_card_speed(struct mmc *mmc, enum bus_mode mode)
+ 		return -EINVAL;
+ 	}
+ 
++	printf("DEBUG: %s speed=%d\n", __func__, speed);
+ 	err = sd_switch(mmc, SD_SWITCH_SWITCH, 0, speed, (u8 *)switch_status);
+ 	if (err)
+ 		return err;
+@@ -1483,6 +1518,7 @@ static int sd_set_card_speed(struct mmc *mmc, enum bus_mode mode)
+ 
+ static int sd_select_bus_width(struct mmc *mmc, int w)
+ {
++	printf("DEBUG: %s w=%d\n", __func__, w);
+ 	int err;
+ 	struct mmc_cmd cmd;
+ 
+@@ -1503,6 +1539,7 @@ static int sd_select_bus_width(struct mmc *mmc, int w)
+ 		cmd.cmdarg = 2;
+ 	else if (w == 1)
+ 		cmd.cmdarg = 0;
++	printf("DEBUG: %s cmdarg=%d\n", __func__, cmd.cmdarg);
+ 	err = mmc_send_cmd(mmc, &cmd, NULL);
+ 	if (err)
+ 		return err;
+@@ -1644,6 +1681,7 @@ static int mmc_host_power_cycle(struct mmc *mmc)
+ 
+ int mmc_set_clock(struct mmc *mmc, uint clock, bool disable)
+ {
++	printf("DEBUG: %s clock=%d disable=%d\n", __func__, clock, disable);
+ 	if (!disable) {
+ 		if (clock > mmc->cfg->f_max)
+ 			clock = mmc->cfg->f_max;
+@@ -2830,10 +2868,12 @@ int mmc_get_op_cond(struct mmc *mmc, bool quiet)
+ 	bool uhs_en = supports_uhs(mmc->cfg->host_caps);
+ 	int err;
+ 
++	printf("MGOC: get_op_cond has_init=%d, uhs_en=%d\n", mmc->has_init, uhs_en);
+ 	if (mmc->has_init)
+ 		return 0;
+ 
+ 	err = mmc_power_init(mmc);
++	printf("MGOC: power_init err=%d\n", err);
+ 	if (err)
+ 		return err;
+ 
+@@ -2844,6 +2884,7 @@ int mmc_get_op_cond(struct mmc *mmc, bool quiet)
+ #endif
+ 
+ 	err = mmc_power_cycle(mmc);
++	printf("MGOC: power_cycle err=%d\n", err);
+ 	if (err) {
+ 		/*
+ 		 * if power cycling is not supported, we should not try
+@@ -2854,6 +2895,7 @@ int mmc_get_op_cond(struct mmc *mmc, bool quiet)
+ 		uhs_en = false;
+ 		mmc->host_caps &= ~UHS_CAPS;
+ 		err = mmc_power_on(mmc);
++		printf("MGOC: 1 power_on err=%d\n", err);
+ 	}
+ 	if (err)
+ 		return err;
+@@ -2863,20 +2905,24 @@ int mmc_get_op_cond(struct mmc *mmc, bool quiet)
+ 	 * Re-initialization is needed to clear old configuration for
+ 	 * mmc rescan.
+ 	 */
++	printf("MGOC: 2 mmc_reinit\n");
+ 	err = mmc_reinit(mmc);
++	printf("MGOC: 3 mmc_reinit err=%d\n", err);
+ #else
+ 	/* made sure it's not NULL earlier */
+ 	err = mmc->cfg->ops->init(mmc);
++	printf("MGOC: 4 init err=%d\n", err);
+ #endif
+ 	if (err)
+ 		return err;
+ 	mmc->ddr_mode = 0;
+ 
+ retry:
++	printf("MGOC: 5 set_initial_state\n");
+ 	mmc_set_initial_state(mmc);
+-
+ 	/* Reset the Card */
+ 	err = mmc_go_idle(mmc);
++	printf("MGOC: 6 go_idle err=%d\n", err);
+ 
+ 	if (err)
+ 		return err;
+@@ -2886,10 +2932,12 @@ retry:
+ 
+ 	/* Test for SD version 2 */
+ 	err = mmc_send_if_cond(mmc);
+-
++	printf("MGOC: 7 send_if_cond err=%d\n", err);
+ 	/* Now try to get the SD card's operating condition */
+ 	err = sd_send_op_cond(mmc, uhs_en);
++	printf("MGOC: 8 send_op_cond err=%d\n", err);
+ 	if (err && uhs_en) {
++		printf("MGOC: 9\n");
+ 		uhs_en = false;
+ 		mmc_power_cycle(mmc);
+ 		goto retry;
+@@ -2898,7 +2946,7 @@ retry:
+ 	/* If the command timed out, we check for an MMC card */
+ 	if (err == -ETIMEDOUT) {
+ 		err = mmc_send_op_cond(mmc);
+-
++		printf("MGOC: 10 send_op_cond err=%d\n", err);
+ 		if (err) {
+ #if !defined(CONFIG_SPL_BUILD) || defined(CONFIG_SPL_LIBCOMMON_SUPPORT)
+ 			if (!quiet)
+@@ -2916,13 +2964,14 @@ int mmc_start_init(struct mmc *mmc)
+ 	bool no_card;
+ 	int err = 0;
+ 
++	printf("MMCI: start_init\n");
+ 	/*
+ 	 * all hosts are capable of 1 bit bus-width and able to use the legacy
+ 	 * timings.
+ 	 */
+ 	mmc->host_caps = mmc->cfg->host_caps | MMC_CAP(MMC_LEGACY) |
+ 			 MMC_MODE_1BIT;
+-
++	
+ 	if (IS_ENABLED(CONFIG_MMC_SPEED_MODE_SET)) {
+ 		if (mmc->user_speed_mode != MMC_MODES_END) {
+ 			int i;
+@@ -2940,14 +2989,22 @@ int mmc_start_init(struct mmc *mmc)
+ 			}
+ 		}
+ 	}
++
++	printf("MMCI: Host caps=%x\n", mmc->host_caps);
++	printf("MMCI: User speed mode=%d\n", mmc->user_speed_mode);
++
+ #if CONFIG_IS_ENABLED(DM_MMC)
++	printf("MMCI: 1\n");
+ 	mmc_deferred_probe(mmc);
+ #endif
+ #if !defined(CONFIG_MMC_BROKEN_CD)
++	printf("MMCI: 2\n");
+ 	no_card = mmc_getcd(mmc) == 0;
+ #else
+ 	no_card = 0;
+ #endif
++	printf("MMCI: no_card=%d\n", no_card);
++
+ #if !CONFIG_IS_ENABLED(DM_MMC)
+ 	/* we pretend there's no card when init is NULL */
+ 	no_card = no_card || (mmc->cfg->ops->init == NULL);
+@@ -2960,8 +3017,9 @@ int mmc_start_init(struct mmc *mmc)
+ 		return -ENOMEDIUM;
+ 	}
+ 
++	printf("MMCI: 3\n");
+ 	err = mmc_get_op_cond(mmc, false);
+-
++	printf("MMCI: 4 err=%d\n", err);
+ 	if (!err)
+ 		mmc->init_in_progress = 1;
+ 
+@@ -3130,15 +3188,22 @@ int mmc_init_device(int num)
+ 	struct mmc *m;
+ 	int ret;
+ 
++	printf("MMCI: num=%d\n", num);
+ 	if (uclass_get_device_by_seq(UCLASS_MMC, num, &dev)) {
++		printf("MMCI: 1\n");
+ 		ret = uclass_get_device(UCLASS_MMC, num, &dev);
+-		if (ret)
++		if (ret) {
++			printf("MMCI: 2\n");
+ 			return ret;
++		}
+ 	}
+ 
++	printf("MMCI: 3-1\n");
+ 	m = mmc_get_mmc_dev(dev);
+-	if (!m)
++	printf("MMCI: 3 dev=%p m=%p\n", dev, m);
++	if (!m) {
+ 		return 0;
++	}
+ 
+ 	/* Initialising user set speed mode */
+ 	m->user_speed_mode = MMC_MODES_END;
+@@ -3146,6 +3211,7 @@ int mmc_init_device(int num)
+ 	if (m->preinit)
+ 		mmc_start_init(m);
+ 
++	printf("MMCI: 4\n");
+ 	return 0;
+ }
+ #endif
+diff --git a/drivers/mmc/sdhci.c b/drivers/mmc/sdhci.c
+index 0178ed8a..19e569a8 100644
+--- a/drivers/mmc/sdhci.c
++++ b/drivers/mmc/sdhci.c
+@@ -7,6 +7,8 @@
+  * Murray.Jensen@cmst.csiro.au, 27-Jan-01.
+  */
+ 
++// #define DEBUG
++
+ #include <common.h>
+ #include <cpu_func.h>
+ #include <dm.h>
+@@ -27,9 +29,13 @@ static void sdhci_reset(struct sdhci_host *host, u8 mask)
+ {
+ 	unsigned long timeout;
+ 
++	debug("%s: ENTER - host=%p, mask=0x%02x\n", __func__, host, mask);
++
+ 	/* Wait max 100 ms */
+ 	timeout = 100;
+ 	sdhci_writeb(host, mask, SDHCI_SOFTWARE_RESET);
++	debug("%s: wrote reset mask 0x%02x to SDHCI_SOFTWARE_RESET\n", __func__, mask);
++	
+ 	while (sdhci_readb(host, SDHCI_SOFTWARE_RESET) & mask) {
+ 		if (timeout == 0) {
+ 			printf("%s: Reset 0x%x never completed.\n",
+@@ -39,6 +45,8 @@ static void sdhci_reset(struct sdhci_host *host, u8 mask)
+ 		timeout--;
+ 		udelay(1000);
+ 	}
++	
++	debug("%s: reset completed after %lu ms\n", __func__, 100 - timeout);
+ }
+ 
+ static void sdhci_cmd_done(struct sdhci_host *host, struct mmc_cmd *cmd)
+@@ -230,6 +238,8 @@ static int sdhci_send_command(struct mmc *mmc, struct mmc_cmd *cmd,
+ 	      cmd->cmdidx == MMC_CMD_SEND_TUNING_BLOCK_HS200) && !data))
+ 		mask &= ~SDHCI_DATA_INHIBIT;
+ 
++	printf("SDHCI: cmdidx=%d, resp_type=%d, cmdarg=%d\n", cmd->cmdidx, cmd->resp_type, cmd->cmdarg);
++
+ 	while (sdhci_readl(host, SDHCI_PRESENT_STATE) & mask) {
+ 		if (time >= cmd_timeout) {
+ 			printf("%s: MMC: %d busy ", __func__, mmc_dev);
+@@ -323,13 +333,19 @@ static int sdhci_send_command(struct mmc *mmc, struct mmc_cmd *cmd,
+ 	} while ((stat & mask) != mask);
+ 
+ 	if ((stat & (SDHCI_INT_ERROR | mask)) == mask) {
++		debug("%s: command completed successfully, stat=0x%08x\n", __func__, stat);
+ 		sdhci_cmd_done(host, cmd);
+ 		sdhci_writel(host, mask, SDHCI_INT_STATUS);
+-	} else
++	} else {
++		printf("%s: command failed, stat=0x%08x, mask=0x%08x\n", __func__, stat, mask);
+ 		ret = -1;
++	}
+ 
+-	if (!ret && data)
++	if (!ret && data) {
++		debug("%s: calling sdhci_transfer_data\n", __func__);
+ 		ret = sdhci_transfer_data(host, data);
++		debug("%s: sdhci_transfer_data returned %d\n", __func__, ret);
++	}
+ 
+ 	if (host->quirks & SDHCI_QUIRK_WAIT_SEND_CMD)
+ 		udelay(1000);
+@@ -338,17 +354,24 @@ static int sdhci_send_command(struct mmc *mmc, struct mmc_cmd *cmd,
+ 	sdhci_writel(host, SDHCI_INT_ALL_MASK, SDHCI_INT_STATUS);
+ 	if (!ret) {
+ 		if ((host->quirks & SDHCI_QUIRK_32BIT_DMA_ADDR) &&
+-				!is_aligned && (data->flags == MMC_DATA_READ))
++				!is_aligned && (data->flags == MMC_DATA_READ)) {
++			debug("%s: copying from align buffer to dest\n", __func__);
+ 			memcpy(data->dest, host->align_buffer, trans_bytes);
++		}
++		debug("%s: command completed successfully\n", __func__);
+ 		return 0;
+ 	}
+ 
++	printf("%s: command failed, performing reset\n", __func__);
+ 	sdhci_reset(host, SDHCI_RESET_CMD);
+ 	sdhci_reset(host, SDHCI_RESET_DATA);
+-	if (stat & SDHCI_INT_TIMEOUT)
++	if (stat & SDHCI_INT_TIMEOUT) {
++		debug("%s: returning -ETIMEDOUT\n", __func__);
+ 		return -ETIMEDOUT;
+-	else
++	} else {
++		debug("%s: returning -ECOMM\n", __func__);
+ 		return -ECOMM;
++	}
+ }
+ 
+ #if defined(CONFIG_DM_MMC) && defined(MMC_SUPPORTS_TUNING)
+@@ -489,6 +512,8 @@ static void sdhci_set_power(struct sdhci_host *host, unsigned short power)
+ {
+ 	u8 pwr = 0;
+ 
++	debug("%s: ENTER - host=%p, power=%u\n", __func__, host, power);
++
+ 	if (power != (unsigned short)-1) {
+ 		switch (1 << power) {
+ 		case MMC_VDD_165_195:
+@@ -503,15 +528,18 @@ static void sdhci_set_power(struct sdhci_host *host, unsigned short power)
+ 			pwr = SDHCI_POWER_330;
+ 			break;
+ 		}
++		debug("%s: calculated power value: 0x%02x\n", __func__, pwr);
+ 	}
+ 
+ 	if (pwr == 0) {
++		debug("%s: turning power off\n", __func__);
+ 		sdhci_writeb(host, 0, SDHCI_POWER_CONTROL);
+ 		return;
+ 	}
+ 
+ 	pwr |= SDHCI_POWER_ON;
+ 
++	debug("%s: setting power control to 0x%02x\n", __func__, pwr);
+ 	sdhci_writeb(host, pwr, SDHCI_POWER_CONTROL);
+ }
+ 
+@@ -721,10 +749,15 @@ static int sdhci_init(struct mmc *mmc)
+ #if CONFIG_IS_ENABLED(DM_MMC) && CONFIG_IS_ENABLED(DM_GPIO)
+ 	struct udevice *dev = mmc->dev;
+ 
++	debug("%s: ENTER - mmc=%p, host=%p, dev=%p\n", __func__, mmc, host, dev);
++
+ 	gpio_request_by_name(dev, "cd-gpios", 0,
+ 			     &host->cd_gpio, GPIOD_IS_IN);
++#else
++	debug("%s: ENTER - mmc=%p, host=%p\n", __func__, mmc, host);
+ #endif
+ 
++	debug("%s: calling sdhci_reset(host, SDHCI_RESET_ALL)\n", __func__);
+ 	sdhci_reset(host, SDHCI_RESET_ALL);
+ 
+ #if defined(CONFIG_FIXED_SDHCI_ALIGNED_BUFFER)
+@@ -734,6 +767,7 @@ static int sdhci_init(struct mmc *mmc)
+ 	 * is defined.
+ 	 */
+ 	host->force_align_buffer = true;
++	debug("%s: using fixed aligned buffer at %p\n", __func__, host->align_buffer);
+ #else
+ 	if (host->quirks & SDHCI_QUIRK_32BIT_DMA_ADDR) {
+ 		host->align_buffer = memalign(8, 512 * 1024);
+@@ -742,20 +776,26 @@ static int sdhci_init(struct mmc *mmc)
+ 			       __func__);
+ 			return -ENOMEM;
+ 		}
++		debug("%s: allocated aligned buffer at %p\n", __func__, host->align_buffer);
+ 	}
+ #endif
+ 
++	debug("%s: calling sdhci_set_power(host, %d)\n", __func__, fls(mmc->cfg->voltages) - 1);
+ 	sdhci_set_power(host, fls(mmc->cfg->voltages) - 1);
+ 
+-	if (host->ops && host->ops->get_cd)
++	if (host->ops && host->ops->get_cd) {
++		debug("%s: calling host->ops->get_cd(host)\n", __func__);
+ 		host->ops->get_cd(host);
++	}
+ 
+ 	/* Enable only interrupts served by the SD controller */
++	debug("%s: enabling interrupts\n", __func__);
+ 	sdhci_writel(host, SDHCI_INT_DATA_MASK | SDHCI_INT_CMD_MASK,
+ 		     SDHCI_INT_ENABLE);
+ 	/* Mask all sdhci interrupt sources */
+ 	sdhci_writel(host, 0x0, SDHCI_SIGNAL_ENABLE);
+ 
++	debug("%s: returning 0\n", __func__);
+ 	return 0;
+ }
+ 
+@@ -764,51 +804,82 @@ int sdhci_probe(struct udevice *dev)
+ {
+ 	struct mmc *mmc = mmc_get_mmc_dev(dev);
+ 
+-	return sdhci_init(mmc);
++	debug("%s: ENTER - dev=%p, dev->name=%s, mmc=%p\n", __func__, dev, dev ? dev->name : "NULL", mmc);
++	
++	int ret = sdhci_init(mmc);
++	debug("%s: sdhci_init returned %d\n", __func__, ret);
++	return ret;
+ }
+ 
+ static int sdhci_deferred_probe(struct udevice *dev)
+ {
+ 	int err;
++	printf("SDP: 1\n");
+ 	struct mmc *mmc = mmc_get_mmc_dev(dev);
++	printf("SDP: 2\n");
+ 	struct sdhci_host *host = mmc->priv;
+ 
++	debug("%s: ENTER - dev=%p, dev->name=%s, mmc=%p, host=%p\n", __func__, dev, dev ? dev->name : "NULL", mmc, host);
++
+ 	if (host->ops && host->ops->deferred_probe) {
++		debug("%s: calling host->ops->deferred_probe(host)\n", __func__);
+ 		err = host->ops->deferred_probe(host);
++		debug("%s: host->ops->deferred_probe returned %d\n", __func__, err);
+ 		if (err)
+ 			return err;
++	} else {
++		debug("%s: no host->ops->deferred_probe operation\n", __func__);
+ 	}
++	
++	debug("%s: returning 0\n", __func__);
+ 	return 0;
+ }
+ 
+ static int sdhci_get_cd(struct udevice *dev)
+ {
++	printf("SGC: 1\n");
+ 	struct mmc *mmc = mmc_get_mmc_dev(dev);
+ 	struct sdhci_host *host = mmc->priv;
+ 	int value;
+ 
++	debug("%s: ENTER - dev=%p, dev->name=%s, mmc=%p, host=%p\n", __func__, dev, dev ? dev->name : "NULL", mmc, host);
++
+ 	/* If nonremovable, assume that the card is always present. */
+-	if (mmc->cfg->host_caps & MMC_CAP_NONREMOVABLE)
++	if (mmc->cfg->host_caps & MMC_CAP_NONREMOVABLE) {
++		debug("%s: card is non-removable, returning 1\n", __func__);
+ 		return 1;
++	}
+ 	/* If polling, assume that the card is always present. */
+-	if (mmc->cfg->host_caps & MMC_CAP_NEEDS_POLL)
++	if (mmc->cfg->host_caps & MMC_CAP_NEEDS_POLL) {
++		debug("%s: card needs polling, returning 1\n", __func__);
+ 		return 1;
++	}
+ 
+ #if CONFIG_IS_ENABLED(DM_GPIO)
+ 	value = dm_gpio_get_value(&host->cd_gpio);
+ 	if (value >= 0) {
+-		if (mmc->cfg->host_caps & MMC_CAP_CD_ACTIVE_HIGH)
++		debug("%s: got GPIO value %d\n", __func__, value);
++		if (mmc->cfg->host_caps & MMC_CAP_CD_ACTIVE_HIGH) {
++			debug("%s: CD active high, returning %d\n", __func__, !value);
+ 			return !value;
+-		else
++		} else {
++			debug("%s: CD active low, returning %d\n", __func__, value);
+ 			return value;
++		}
+ 	}
++	debug("%s: no valid GPIO value, checking SDHCI register\n", __func__);
+ #endif
+ 	value = !!(sdhci_readl(host, SDHCI_PRESENT_STATE) &
+ 		   SDHCI_CARD_PRESENT);
+-	if (mmc->cfg->host_caps & MMC_CAP_CD_ACTIVE_HIGH)
++	debug("%s: SDHCI_PRESENT_STATE card present bit: %d\n", __func__, value);
++	
++	if (mmc->cfg->host_caps & MMC_CAP_CD_ACTIVE_HIGH) {
++		debug("%s: CD active high, returning %d\n", __func__, !value);
+ 		return !value;
+-	else
++	} else {
++		debug("%s: CD active low, returning %d\n", __func__, value);
+ 		return value;
++	}
+ }
+ 
+ static int sdhci_wait_dat0(struct udevice *dev, int state,
+diff --git a/drivers/ram/k3-am654-ddrss.c b/drivers/ram/k3-am654-ddrss.c
+index cff8ffc8..9fafe5fa 100644
+--- a/drivers/ram/k3-am654-ddrss.c
++++ b/drivers/ram/k3-am654-ddrss.c
+@@ -834,8 +834,9 @@ static int am654_ddrss_init(struct am654_ddrss_desc *ddrss)
+ 	}
+ 
+ 	ret = cleanup_training(ddrss);
+-	if (ret)
++	if (ret) {
+ 		return ret;
++	}
+ 
+ 	/* Enabling refreshes after training is done */
+ 	ddrss_ctl_writel(DDRSS_DDRCTL_RFSHCTL3,
+@@ -1061,15 +1062,20 @@ static int am654_ddrss_probe(struct udevice *dev)
+ 	debug("%s(dev=%p)\n", __func__, dev);
+ 
+ 	ret = am654_ddrss_ofdata_to_priv(dev);
+-	if (ret)
++	if (ret) {
+ 		return ret;
++	}
+ 
+ 	ddrss->dev = dev;
+ 	ret = am654_ddrss_power_on(ddrss);
+-	if (ret)
++	if (ret) {
+ 		return ret;
++	}
+ 
+ 	ret = am654_ddrss_init(ddrss);
++	if (ret) {
++		return ret;
++	}
+ 
+ 	return ret;
+ }
+diff --git a/drivers/ram/k3-ddrss/k3-ddrss.c b/drivers/ram/k3-ddrss/k3-ddrss.c
+index 0a91c8d5..b647413c 100644
+--- a/drivers/ram/k3-ddrss/k3-ddrss.c
++++ b/drivers/ram/k3-ddrss/k3-ddrss.c
+@@ -517,14 +517,16 @@ void k3_lpddr4_hardware_reg_init(struct k3_ddrss_desc *ddrss)
+ 	status = driverdt->writectlconfig(pd, reginitdata.ctl_regs,
+ 					  reginitdata.ctl_regs_offs,
+ 					  LPDDR4_INTR_CTL_REG_COUNT);
+-	if (!status)
++	if (!status) {
+ 		status = driverdt->writephyindepconfig(pd, reginitdata.pi_regs,
+ 						       reginitdata.pi_regs_offs,
+ 						       LPDDR4_INTR_PHY_INDEP_REG_COUNT);
+-	if (!status)
++	}
++	if (!status) {
+ 		status = driverdt->writephyconfig(pd, reginitdata.phy_regs,
+ 						  reginitdata.phy_regs_offs,
+ 						  LPDDR4_INTR_PHY_REG_COUNT);
++	}
+ 	if (status) {
+ 		printf("%s: FAIL\n", __func__);
+ 		hang();
+@@ -790,13 +792,15 @@ static int k3_ddrss_probe(struct udevice *dev)
+ 	debug("%s(dev=%p)\n", __func__, dev);
+ 
+ 	ret = k3_ddrss_ofdata_to_priv(dev);
+-	if (ret)
++	if (ret) {
+ 		return ret;
++	}
+ 
+ 	ddrss->dev = dev;
+ 	ret = k3_ddrss_power_on(ddrss);
+-	if (ret)
++	if (ret) {
+ 		return ret;
++	}
+ 
+ 	k3_ddrss_ddr_bank_base_size_calc(ddrss);
+ 
+@@ -809,8 +813,9 @@ static int k3_ddrss_probe(struct udevice *dev)
+ 	k3_lpddr4_hardware_reg_init(ddrss);
+ 
+ 	ret = k3_ddrss_init_freq(ddrss);
+-	if (ret)
++	if (ret) {
+ 		return ret;
++	}
+ 
+ 	k3_lpddr4_start(ddrss);
+ 
+diff --git a/fs/fat/fat.c b/fs/fat/fat.c
+index 14e53cf2..317bd8b0 100644
+--- a/fs/fat/fat.c
++++ b/fs/fat/fat.c
+@@ -9,6 +9,7 @@
+  */
+ 
+ #define LOG_CATEGORY	LOGC_FS
++#define DEBUG 1
+ 
+ #include <common.h>
+ #include <blk.h>
+diff --git a/lib/string.c b/lib/string.c
+index f2c61471..f6ee5666 100644
+--- a/lib/string.c
++++ b/lib/string.c
+@@ -21,6 +21,7 @@
+ #include <linux/string.h>
+ #include <linux/ctype.h>
+ #include <malloc.h>
++#include <stdio.h>
+ 
+ 
+ /**
+@@ -526,12 +527,15 @@ __used void * memset(void * s,int c,size_t count)
+ 	unsigned long *sl = (unsigned long *) s;
+ 	char *s8;
+ 
++	printf("memset called - s=%p, c=0x%x, count=%zu\n", s, c, count);
++
+ #if !CONFIG_IS_ENABLED(TINY_MEMSET)
+ 	unsigned long cl = 0;
+ 	int i;
+ 
+ 	/* do it one word at a time (32 bits or 64 bits) while possible */
+ 	if ( ((ulong)s & (sizeof(*sl) - 1)) == 0) {
++		printf("memset - using word-aligned optimization\n");
+ 		for (i = 0; i < sizeof(*sl); i++) {
+ 			cl <<= 8;
+ 			cl |= c & 0xff;
+@@ -540,12 +544,19 @@ __used void * memset(void * s,int c,size_t count)
+ 			*sl++ = cl;
+ 			count -= sizeof(*sl);
+ 		}
++		printf("memset - word fill complete, remaining count=%zu\n", count);
++	} else {
++		printf("memset - pointer not word-aligned, using byte fill\n");
+ 	}
+ #endif	/* fill 8 bits at a time */
+ 	s8 = (char *)sl;
+-	while (count--)
++	printf("memset - filling remaining %zu bytes\n", count);
++	while (count--) {
++		printf("%zu %p\n", count, s8);
+ 		*s8++ = c;
++	}
+ 
++	printf("memset - completed, returning %p\n", s);
+ 	return s;
+ }
+ #endif
+diff --git a/net/nfs.c b/net/nfs.c
+index 7a8887ef..3d25468d 100644
+--- a/net/nfs.c
++++ b/net/nfs.c
+@@ -212,24 +212,6 @@ static void rpc_req(int rpc_prog, int rpc_proc, uint32_t *data, int datalen)
+ 		}
+ 		break;
+ 	case PROG_MOUNT:
+-		switch (choosen_nfs_version) {
+-		case NFS_V1:
+-			rpc_pkt.u.call.vers = htonl(1);
+-			break;
+-
+-		case NFS_V2:
+-			rpc_pkt.u.call.vers = htonl(2);
+-			break;
+-
+-		case NFS_V3:
+-			rpc_pkt.u.call.vers = htonl(3);
+-			break;
+-
+-		case NFS_UNKOWN:
+-			/* nothing to do */
+-			break;
+-		}
+-		break;
+ 	case PROG_PORTMAP:
+ 	default:
+ 		rpc_pkt.u.call.vers = htonl(2);	/* portmapper is version 2 */
+diff --git a/scripts/Makefile.spl b/scripts/Makefile.spl
+index 407fc523..6ab83707 100644
+--- a/scripts/Makefile.spl
++++ b/scripts/Makefile.spl
+@@ -133,6 +133,7 @@ libs-y := $(patsubst %/, %/built-in.o, $(libs-y))
+ ifeq ($(CONFIG_USE_PRIVATE_LIBGCC),y)
+ PLATFORM_LIBGCC = arch/$(ARCH)/lib/lib.a
+ PLATFORM_LIBS := $(filter-out %/lib.a, $(filter-out -lgcc, $(PLATFORM_LIBS))) $(PLATFORM_LIBGCC)
++$(info PLATFORM_LIBS = $(PLATFORM_LIBS))
+ endif
+ 
+ u-boot-spl-init := $(head-y)
